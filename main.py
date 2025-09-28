@@ -1,11 +1,9 @@
 import sys
 import os
 import uuid
-from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QTableWidgetItem, QMessageBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QListWidgetItem, QMessageBox
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import QFile, QIODevice, QTimer
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QListWidgetItem
+from PySide6.QtCore import QFile, QIODevice, Qt
 
 # Import logic modules
 from system_info import SystemInfo
@@ -18,7 +16,6 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Secure Data Wiper")
         self.ui_files_dir = "ui_files"
         self.user_data = {}
         self.system_data = {}
@@ -71,17 +68,13 @@ class MainWindow(QMainWindow):
     def go_to_page(self, page_name):
         """Switches the stacked widget to the specified page."""
         widget = self.pages.get(page_name)
-        if widget:
-            self.stacked_widget.setCurrentWidget(widget)
-        else:
-            print(f"Error: Page '{page_name}' not found.")
+        self.stacked_widget.setCurrentWidget(widget)
 
     def _setup_home_page(self):
         """Set up signals and slots for the homepage."""
         home_page = self.pages["home"]
         home_page.Laptop_pushButton.clicked.connect(lambda: self.go_to_page("info_input"))
-        # Android button can be disabled or show a message
-        home_page.Android_pushButton.clicked.connect(self._android_not_supported)
+        # Android button disabled
 
     def _setup_info_input_page(self):
         """Set up signals and slots for the info input page."""
@@ -124,15 +117,6 @@ class MainWindow(QMainWindow):
         unsuccessful_page.pushButton.clicked.connect(lambda: self.go_to_page("system_info"))
 
 
-    def _android_not_supported(self):
-        """Shows a message that Android is not yet supported."""
-        msg_box = QMessageBox(self)
-        msg_box.setIcon(QMessageBox.Information)
-        msg_box.setText("Android Support")
-        msg_box.setInformativeText("Wiping for Android devices is not yet implemented.")
-        msg_box.setWindowTitle("Information")
-        msg_box.exec()
-
     def _validate_info_input(self, fields):
         """Check if all required fields on the info page are filled."""
         info_page = self.pages["info_input"]
@@ -146,7 +130,8 @@ class MainWindow(QMainWindow):
             "name": info_page.Name_lineEdit.text(),
             "organization": info_page.OrganizationlineEdit.text(),
             "title": info_page.Title_lineEdit.text(),
-            "location": info_page.Email_lineEdit.text(), # Assuming this is location
+            "location": info_page.Location_lineEdit.text(),
+            "email": info_page.Email_lineEdit.text(), 
             "phone": info_page.Phone_lineEdit.text(),
             "media_property_number": info_page.AssetTag_lineEdit.text(),
             "source": info_page.Source_lineEdit.text(),
@@ -208,7 +193,6 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Devices Selected", "Please select at least one device to wipe.")
             return
 
-        self.certificate_id = str(uuid.uuid4())
         
         # Create a formatted list of devices for the confirmation dialog
         device_names = '\n'.join([f"- {dev.get('name', 'N/A')}" for dev in self.devices_to_wipe])
@@ -216,7 +200,6 @@ class MainWindow(QMainWindow):
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Warning)
         msg_box.setText("Are you sure you want to wipe the selected device(s)?")
-        msg_box.setInformativeText(f"This action is IRREVERSIBLE.\n\nDevices to be wiped:\n{device_names}\n\nYour certificate ID will be:\n{self.certificate_id}")
         msg_box.setWindowTitle("Confirm Wipe")
         msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg_box.setDefaultButton(QMessageBox.No)
@@ -227,6 +210,7 @@ class MainWindow(QMainWindow):
             self.wipe_thread.progress.connect(self.update_loading_progress)
             self.wipe_thread.finished.connect(self.on_wiping_finished)
             self.wipe_thread.start()
+            self.certificate_id = str(uuid.uuid4())
 
     def update_loading_progress(self, value):
         """Updates the progress bar on the loading page."""

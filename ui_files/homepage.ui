@@ -17,7 +17,7 @@
    </font>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string>EasyWipe</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
    <property name="leftMargin">
@@ -140,7 +140,7 @@ ensuring compilance with NIST SP 800-88.</string>
       <enum>QFrame::NoFrame</enum>
      </property>
      <property name="text">
-      <string>Data Wiping :)</string>
+      <string>Easy Data Wiping :)</string>
      </property>
      <property name="wordWrap">
       <bool>false</bool>
@@ -149,6 +149,9 @@ ensuring compilance with NIST SP 800-88.</string>
    </item>
    <item row="10" column="1" alignment="Qt::AlignRight">
     <widget class="QPushButton" name="Android_pushButton">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
      <property name="sizePolicy">
       <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
        <horstretch>0</horstretch>

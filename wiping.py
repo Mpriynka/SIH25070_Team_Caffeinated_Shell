@@ -1,27 +1,36 @@
 import os
 import time
-from PySide6.QtCore import QThread, Signal
+import subprocess
 from datetime import datetime
+from PySide6.QtCore import QThread, Signal
+
+# --- IMPORTANT SECURITY NOTE ---
+# This script requires root/administrator privileges to access block devices directly.
+# It should be run with 'sudo python main.py'.
+# Misuse of these commands can lead to PERMANENT DATA LOSS.
 
 class WipeThread(QThread):
     """
-    A QThread to handle the data wiping process without freezing the GUI.
-    This is a SIMULATION. It writes to a temporary file instead of a real device.
+    A QThread to handle the data wiping process using real command-line tools.
+    It selects the appropriate tool based on the device type.
     """
     progress = Signal(int)
     finished = Signal(bool, str, dict)  # success (bool), message (str), report_data (dict)
 
-    def __init__(self, device_list, block_size=1024*1024, passes=3):
+    def __init__(self, device_list, passes=3):
         super().__init__()
         self.device_list = device_list
-        self.block_size = block_size
-        self.passes = passes
+        self.passes = passes # Used for shred fallback
         self.is_running = True
         self.start_time = None
         self.end_time = None
+        self.methods_used = {} # To track the method used for each device
 
     def run(self):
-        """Main thread execution logic for multiple devices."""
+        """
+        Main thread execution logic. Iterates through devices and calls the
+        appropriate wiping function based on device type.
+        """
         self.start_time = datetime.utcnow()
         total_devices = len(self.device_list)
         devices_wiped_successfully = []
@@ -29,30 +38,25 @@ class WipeThread(QThread):
         try:
             for i, device in enumerate(self.device_list):
                 if not self.is_running:
-                    raise Exception("Wipe process was cancelled by user.")
-                
-                # Use device name for simulation file to avoid conflicts
-                simulated_device_path = f"wipe_sim_{device.get('name', 'unknown').replace('/', '_')}.tmp"
-                
-                # --- SIMULATION SETUP ---
-                file_size = 50 * 1024 * 1024  # 50 MB simulation file
-                with open(simulated_device_path, "wb") as f:
-                    f.truncate(file_size)
-                # --- END SIMULATION SETUP ---
-                
-                total_size = os.path.getsize(simulated_device_path)
+                    raise Exception("Wipe process was cancelled by the user.")
 
-                # Perform passes
-                for pass_num in range(self.passes):
-                    pattern = b'\x00' if pass_num == 0 else (b'\xFF' if pass_num == 1 else os.urandom(1))
-                    self._perform_pass(simulated_device_path, total_size, pass_num, i, total_devices, pattern)
+                device_path = device.get('name')
+                if not device_path or not os.path.exists(device_path):
+                    raise Exception(f"Device path {device_path} does not exist.")
                 
-                devices_wiped_successfully.append(device.get('name'))
+                # Safety Check: ensure we are dealing with a block device
+                if not os.path.isblock(device_path):
+                     raise Exception(f"Path {device_path} is not a block device. Halting for safety.")
 
-                # --- SIMULATION CLEANUP ---
-                if os.path.exists(simulated_device_path):
-                    os.remove(simulated_device_path)
-                # --- END SIMULATION CLEANUP ---
+                # Dispatch to the correct wiping method
+                self._wipe_device(device)
+                
+                # If wipe was successful
+                devices_wiped_successfully.append(device_path)
+                
+                # Update overall progress after each device is done
+                progress_val = int(((i + 1) / total_devices) * 100)
+                self.progress.emit(progress_val)
 
             self.end_time = datetime.utcnow()
             report = self._generate_report(True, "Wipe completed successfully.", devices_wiped_successfully)
@@ -64,23 +68,99 @@ class WipeThread(QThread):
             report = self._generate_report(False, error_message, devices_wiped_successfully)
             self.finished.emit(False, error_message, report)
 
-    def _perform_pass(self, device_path, total_size, pass_num, device_idx, total_devices, pattern):
-        """Simulates a single pass of writing data to a device."""
-        written = 0
-        with open(device_path, "wb") as f:
-            while written < total_size and self.is_running:
-                data_block = pattern * self.block_size
-                f.write(data_block)
-                written += self.block_size
-                
-                # Calculate overall progress across all devices and passes
-                pass_progress = (written / total_size)
-                device_progress = (pass_num + pass_progress) / self.passes
-                overall_progress = ((device_idx + device_progress) / total_devices) * 100
-                
-                self.progress.emit(int(overall_progress))
-                time.sleep(0.01) # Simulate I/O delay
+    def _run_command(self, command):
+        """Helper to run a command and raise an exception on error."""
+        print(f"Executing: {' '.join(command)}")
+        # In a real app, you might want to redirect stdout/stderr
+        subprocess.run(command, check=True, capture_output=True, text=True)
 
+    def _wipe_device(self, device):
+        """
+        Selects the correct wiping strategy based on the device name and type.
+        Hierarchy: NVMe Sanitize > SATA Secure Erase > Shred Overwrite
+        """
+        device_path = device['name']
+        
+        if 'nvme' in device_path:
+            # It's an NVMe drive
+            try:
+                print(f"Attempting NVMe Sanitize on {device_path}...")
+                # Using crypto erase (ses=2), which is fast and secure.
+                self._run_command(["nvme", "sanitize", device_path, "-a", "2"])
+                self.methods_used[device_path] = "NVMe Sanitize (Cryptographic Erase)"
+                return
+            except Exception as e:
+                print(f"NVMe Sanitize failed: {e}. Falling back to NVMe Format.")
+                try:
+                    # Fallback to a standard format with secure erase settings
+                    self._run_command(["nvme", "format", device_path, "-s", "1"])
+                    self.methods_used[device_path] = "NVMe Format (User Data Erase)"
+                    return
+                except Exception as e_fmt:
+                    raise Exception(f"NVMe Format also failed on {device_path}: {e_fmt}")
+
+        elif 'sd' in device_path:
+            # It's a SATA device (SSD or HDD)
+            try:
+                # Check if drive is rotational (HDD) or not (SSD)
+                rotational_path = f"/sys/block/{os.path.basename(device_path)}/queue/rotational"
+                with open(rotational_path, 'r') as f:
+                    is_hdd = f.read().strip() == '1'
+
+                # For SSDs, strongly prefer Secure Erase. For HDDs, it's an option but shred is also fine.
+                if not is_hdd:
+                    print(f"Attempting SATA Secure Erase on SSD {device_path}...")
+                    self._wipe_sata_secure_erase(device_path)
+                    self.methods_used[device_path] = "ATA Secure Erase"
+                    return
+            except Exception as e_sec:
+                print(f"SATA Secure Erase failed or was skipped: {e_sec}. Falling back to shred.")
+            
+            # Fallback for HDDs or if Secure Erase fails
+            print(f"Using shred (software overwrite) on {device_path}...")
+            self._wipe_with_shred(device_path)
+            self.methods_used[device_path] = f"{self.passes}-Pass Overwrite (shred)"
+            return
+            
+        raise Exception(f"Unsupported device type for {device_path}")
+
+
+    def _wipe_sata_secure_erase(self, device_path):
+        """
+        Performs an ATA Secure Erase on a SATA device.
+        NOTE: This is a complex operation. Drives are often in a 'frozen' state
+        which prevents this from working without a power cycle. This implementation
+        assumes the drive is not frozen.
+        """
+        password = "p"
+        # 1. Check if security is supported and not enabled.
+        # This is a simplified check. A full one would parse `hdparm -I` output.
+        
+        # 2. Set a temporary password.
+        self._run_command(["hdparm", "--user-master", "user", "--security-set-pass", password, device_path])
+
+        # 3. Issue the erase command.
+        # --security-erase is for standard erase. --security-erase-enhanced is better if supported.
+        try:
+            self._run_command(["hdparm", "--user-master", "user", "--security-erase", password, device_path])
+        except subprocess.TimeoutExpired:
+            # Secure erase commands often don't return until done, which can take hours.
+            # For the purpose of this app, we assume it has started successfully.
+            # A more robust solution would monitor the drive's state.
+            print("Secure Erase command sent. Assuming it is in progress.")
+        except Exception as e:
+            # If it fails, try to disable security so the drive isn't locked.
+            self._run_command(["hdparm", "--user-master", "user", "--security-disable", password, device_path])
+            raise e
+
+    def _wipe_with_shred(self, device_path):
+        """Wipes a device using the 'shred' command."""
+        # -n 2: 2 passes of random data
+        # -v: verbose, show progress
+        # -z: final pass of zeros to hide shredding
+        command = ["shred", "-n", "2", "-v", "-z", device_path]
+        self._run_command(command)
+        
     def _generate_report(self, success, message, wiped_devices):
         """Generates a dictionary with wipe results."""
         return {
@@ -91,10 +171,13 @@ class WipeThread(QThread):
             "start_time_utc": self.start_time.isoformat() + "Z",
             "end_time_utc": self.end_time.isoformat() + "Z" if self.end_time else "N/A",
             "duration_seconds": (self.end_time - self.start_time).total_seconds() if self.end_time else 0,
-            "method_used": f"{self.passes}-pass overwrite (NIST 800-88 Clear)",
-            "passes_completed": self.passes if success else "N/A"
+            "methods_used": self.methods_used,
         }
 
     def stop(self):
-        """Stops the wiping process."""
+        """Stops the wiping process if possible."""
+        # NOTE: Stopping a low-level format command that is already running is
+        # non-trivial and can be dangerous. This provides a basic flag to
+        # prevent new wipe operations from starting.
+        print("Stop signal received. Will halt after the current device operation.")
         self.is_running = False

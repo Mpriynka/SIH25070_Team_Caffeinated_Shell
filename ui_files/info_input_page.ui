@@ -20,7 +20,7 @@
    </font>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string>EasyWipe</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
    <property name="leftMargin">
@@ -132,10 +132,10 @@
        <widget class="QLineEdit" name="Title_lineEdit"/>
       </item>
       <item row="3" column="2">
-       <widget class="QLineEdit" name="Email_lineEdit"/>
+       <widget class="QLineEdit" name="Location_lineEdit"/>
       </item>
       <item row="4" column="2">
-       <widget class="QLineEdit" name="Email_lineEdit_2"/>
+       <widget class="QLineEdit" name="Email_lineEdit"/>
       </item>
       <item row="5" column="2">
        <widget class="QLineEdit" name="Phone_lineEdit"/>
