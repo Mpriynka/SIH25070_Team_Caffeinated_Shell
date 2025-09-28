@@ -4,6 +4,8 @@ import uuid
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QTableWidgetItem, QMessageBox
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import QFile, QIODevice, QTimer
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QListWidgetItem
 
 # Import logic modules
 from system_info import SystemInfo
@@ -99,17 +101,14 @@ class MainWindow(QMainWindow):
         """Set up signals and slots for the system info page."""
         sys_info_page = self.pages["system_info"]
         sys_info_page.Home_Button.clicked.connect(lambda: self.go_to_page("home"))
-        sys_info_page.RefreshDevices_Button.clicked.connect(self.populate_device_table)
+        sys_info_page.RefreshDevices_Button.clicked.connect(self.populate_device_list)
         sys_info_page.Wipe_Button.clicked.connect(self.start_wiping_process)
         
-        # Setup table
-        table = sys_info_page.tableWidget
-        table.setColumnCount(4)
-        table.setHorizontalHeaderLabels(["Device Name", "Model", "Serial Number", "Size"])
-        table.setColumnWidth(0, 150)
-        table.setColumnWidth(1, 250)
-        table.setColumnWidth(2, 200)
-        table.setColumnWidth(3, 100)
+        # Disable wipe button by default
+        sys_info_page.Wipe_Button.setEnabled(False)
+        
+        # Connect itemChanged signal to enable/disable wipe button
+        sys_info_page.listWidget.itemChanged.connect(self._update_wipe_button_state)
 
 
     def _setup_report_page(self):
@@ -155,48 +154,76 @@ class MainWindow(QMainWindow):
             "notes": info_page.Notes_lineEdit.text(),
             "destination": info_page.Destination_lineEdit.text()
         }
-        self.populate_device_table()
+        self.populate_device_list()
         self.go_to_page("system_info")
 
-    def populate_device_table(self):
-        """Fetches storage device info and populates the table."""
+
+    def _update_wipe_button_state(self):
+        """Enable Wipe button only if at least one item is checked."""
         sys_info_page = self.pages["system_info"]
-        table = sys_info_page.tableWidget
-        table.setRowCount(0)  # Clear existing rows
+        checked_items = []
+        for i in range(sys_info_page.listWidget.count()):
+            if sys_info_page.listWidget.item(i).checkState() == Qt.Checked:
+                checked_items.append(True)
+        
+        sys_info_page.Wipe_Button.setEnabled(any(checked_items))
+
+
+    def populate_device_list(self):
+        """Fetches storage device info and populates the list."""
+        sys_info_page = self.pages["system_info"]
+        list_widget = sys_info_page.listWidget
+        list_widget.clear()
 
         self.system_data = self.system_info_handler.get_all_info()
         devices = self.system_data.get("storage_devices", [])
 
-        for row_num, device in enumerate(devices):
-            table.insertRow(row_num)
-            table.setItem(row_num, 0, QTableWidgetItem(device.get("name", "N/A")))
-            table.setItem(row_num, 1, QTableWidgetItem(device.get("model", "N/A")))
-            table.setItem(row_num, 2, QTableWidgetItem(device.get("serial", "N/A")))
-            table.setItem(row_num, 3, QTableWidgetItem(device.get("size", "N/A")))
+        for device in devices:
+            # Create a user-friendly string for the list item
+            item_text = (f"{device.get('name', 'N/A')} - "
+                        f"{device.get('model', 'N/A')} "
+                        f"({device.get('size', 'N/A')})")
+            
+            item = QListWidgetItem(item_text)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Unchecked)
+            
+            # Store the full device dictionary with the item
+            item.setData(Qt.UserRole, device)
+            
+            list_widget.addItem(item)
             
     def start_wiping_process(self):
-        """Initiates the wiping thread for all detected devices."""
+        """Initiates the wiping thread for selected devices."""
+        sys_info_page = self.pages["system_info"]
+        self.devices_to_wipe = []
+        
+        # Compile a list of checked devices
+        for i in range(sys_info_page.listWidget.count()):
+            item = sys_info_page.listWidget.item(i)
+            if item.checkState() == Qt.Checked:
+                self.devices_to_wipe.append(item.data(Qt.UserRole))
+
+        if not self.devices_to_wipe:
+            QMessageBox.warning(self, "No Devices Selected", "Please select at least one device to wipe.")
+            return
+
         self.certificate_id = str(uuid.uuid4())
         
-        # Show a confirmation dialog with the UUID
+        # Create a formatted list of devices for the confirmation dialog
+        device_names = '\n'.join([f"- {dev.get('name', 'N/A')}" for dev in self.devices_to_wipe])
+        
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setText("Are you sure you want to proceed with wiping?")
-        msg_box.setInformativeText(f"This action is IRREVERSIBLE.\n\nYour certificate reference ID will be:\n{self.certificate_id}")
+        msg_box.setText("Are you sure you want to wipe the selected device(s)?")
+        msg_box.setInformativeText(f"This action is IRREVERSIBLE.\n\nDevices to be wiped:\n{device_names}\n\nYour certificate ID will be:\n{self.certificate_id}")
         msg_box.setWindowTitle("Confirm Wipe")
         msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg_box.setDefaultButton(QMessageBox.No)
         
         if msg_box.exec() == QMessageBox.Yes:
             self.go_to_page("loading")
-            # This is where you would get the list of devices to wipe
-            devices_to_wipe = [dev['name'] for dev in self.system_data.get("storage_devices", [])]
-            
-            # For now, we simulate wiping one device. In a real app, you might loop or have selections.
-            # Using a placeholder path for simulation.
-            simulated_device_path = "wipe_simulation.tmp"
-
-            self.wipe_thread = WipeThread(simulated_device_path)
+            self.wipe_thread = WipeThread(self.devices_to_wipe)
             self.wipe_thread.progress.connect(self.update_loading_progress)
             self.wipe_thread.finished.connect(self.on_wiping_finished)
             self.wipe_thread.start()
@@ -212,6 +239,7 @@ class MainWindow(QMainWindow):
             cert_generator = CertificateGenerator(
                 user_data=self.user_data,
                 system_data=self.system_data,
+                wiped_devices=self.devices_to_wipe, # Pass the selected devices
                 wipe_report=report_data,
                 certificate_id=self.certificate_id
             )

@@ -7,9 +7,10 @@ from reportlab.lib.units import inch
 class CertificateGenerator:
     """Generates PDF and JSON certificates of sanitization."""
 
-    def __init__(self, user_data, system_data, wipe_report, certificate_id):
+    def __init__(self, user_data, system_data, wiped_devices, wipe_report, certificate_id):
         self.user_data = user_data
         self.system_data = system_data
+        self.wiped_devices = wiped_devices # Add this
         self.wipe_report = wipe_report
         self.certificate_id = certificate_id
         self.timestamp = datetime.utcnow()
@@ -29,7 +30,7 @@ class CertificateGenerator:
             "media_information": {
                 "make_vendor": self.system_data.get("system_details", {}).get("vendor"),
                 "model_number": self.system_data.get("system_details", {}).get("model"),
-                "serial_numbers": [dev.get("serial", "N/A") for dev in self.system_data.get("storage_devices", [])],
+                "serial_numbers": [dev.get("serial", "N/A") for dev in self.wiped_devices],
                 "media_property_number": self.user_data.get("media_property_number"),
                 "source": self.user_data.get("source"),
                 "backup_location": self.user_data.get("backup_location"),
