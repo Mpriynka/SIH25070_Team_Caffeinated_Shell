@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QComboBox, QCheckBox, QSpinBox, QFrame
 )
 from PySide6.QtCore import (
-    Qt, QThread, pyqtSignal, QTimer, QSize, QPropertyAnimation,
+    Qt, QThread, QTimer, QSize, QPropertyAnimation,
     QEasingCurve, QRect, QObject, Signal
 )
 from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor
