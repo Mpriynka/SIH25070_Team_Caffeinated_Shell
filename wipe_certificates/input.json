@@ -1,0 +1,45 @@
+{
+        "personPerformingSanitization": {
+            "name": "John Smith",
+            "title": "IT Security Specialist",
+            "organization": "ABC Corporation",
+            "location": "Data Center A",
+            "phone": "+1-555-0123"
+        },
+        
+        "mediaInformation": {
+            "makeVendor": "Western Digital",
+            "modelNumber": "WD2003FZEX",
+            "serialNumber": "WX12A345B678",
+            "mediaPropertyNumber": "IT-STOR-0042",
+            "mediaType": "Hard Disk Drive",
+            "source": "User: jdoe - PC: PC-0241",
+            "classification": "Confidential",
+            "dataBackedUp": "Yes",
+            "backupLocation": "NAS-BACKUP-01/2024-12-15"
+        },
+        
+        "sanitizationDetails": {
+            "methodType": "Purge",
+            "methodUsed": "Overwrite",
+            "methodDetails": "3-pass DoD 5220.22-M standard",
+            "toolUsed": "Blanco Shredder v3.2.1",
+            "verificationMethod": "Full",
+            "postSanitizationClassification": "Unclassified",
+            "notes": "Media passed all verification checks"
+        },
+        
+        "mediaDestination": {
+            "destination": "RecyclingFacility",
+            "details": "Scheduled for pickup on 2024-12-20"
+        },
+        
+        "validation": {
+            "validatorName": "Jane Davis",
+            "validatorTitle": "Security Manager",
+            "validatorOrganization": "ABC Corporation",
+            "validatorLocation": "Security Office",
+            "validatorPhone": "+1-555-0124",
+            "validationDate": "2024-12-15"
+        }
+    }
