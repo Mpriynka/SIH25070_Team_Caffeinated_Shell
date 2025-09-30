@@ -2,9 +2,9 @@ import os
 import uuid
 import json
 import sys
-from pdf_generator import generate_pdf
-from pdf_signer import sign_pdf
-from create_p12 import create_p12
+from wipe_certificates.pdf_generator import generate_pdf
+from wipe_certificates.pdf_signer import sign_pdf
+from wipe_certificates.create_p12 import create_p12
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,7 +26,7 @@ PDF_FOLDER = "pdf_reports"
 os.makedirs(JSON_FOLDER, exist_ok=True)
 os.makedirs(PDF_FOLDER, exist_ok=True)
 
-if __name__ == "__main__":
+def richa(data, report_uuid):
     print("=== PDF GENERATION AND SIGNING SCRIPT ===")
 
     # Create P12 certificate if it doesn't exist
@@ -37,12 +37,11 @@ if __name__ == "__main__":
     else:
         print(f"\n[0] Certificate already exists: {P12_FILE}, skipping creation")
 
-    print("\n[1] Loading JSON data...")
-    with open(INPUT_JSON, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    print("✓ JSON loaded successfully")
+    # print("\n[1] Loading JSON data...")
+    # with open(INPUT_JSON, "r", encoding="utf-8") as f:
+    #     data = json.load(f)
+    # print("✓ JSON loaded successfully")
 
-    report_uuid = str(uuid.uuid4())
     data["report_uuid"] = report_uuid
 
     json_filename = os.path.join(JSON_FOLDER, f"sanitization_report_{report_uuid}.json")

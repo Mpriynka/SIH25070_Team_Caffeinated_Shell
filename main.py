@@ -11,6 +11,20 @@ from wiping import WipeThread
 from certificate import CertificateGenerator
 
 
+
+P12_FILE = os.getenv("P12_FILE", "certificate.p12")
+P12_PASSWORD = os.getenv("P12_PASSWORD", "123")
+
+
+JSON_FOLDER = "json_reports"
+PDF_FOLDER = "pdf_reports"
+os.makedirs(JSON_FOLDER, exist_ok=True)
+os.makedirs(PDF_FOLDER, exist_ok=True)
+
+
+
+
+
 class MainWindow(QMainWindow):
     """Main application window to manage the UI and application flow."""
 
@@ -210,7 +224,7 @@ class MainWindow(QMainWindow):
             self.wipe_thread.progress.connect(self.update_loading_progress)
             self.wipe_thread.finished.connect(self.on_wiping_finished)
             self.wipe_thread.start()
-            self.certificate_id = str(uuid.uuid4())
+            self.certificate_id = str(uuid.uuid4()) 
 
     def update_loading_progress(self, value):
         """Updates the progress bar on the loading page."""
@@ -220,6 +234,7 @@ class MainWindow(QMainWindow):
     def on_wiping_finished(self, success, message, report_data):
         """Handles the completion of the wiping process."""
         if success:
+
             cert_generator = CertificateGenerator(
                 user_data=self.user_data,
                 system_data=self.system_data,
@@ -227,7 +242,8 @@ class MainWindow(QMainWindow):
                 wipe_report=report_data,
                 certificate_id=self.certificate_id
             )
-            cert_generator.generate_all()
+            cert_generator.generate_pdf()
+            self._show_download_info()
             
             report_page = self.pages["report"]
             report_page.ReID_Label.setText(f"Ref. ID: {self.certificate_id}")
